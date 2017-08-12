@@ -200,15 +200,10 @@ public class AutoBumpDecorator extends Decorator implements EditablePiece {
                 }
             }
             // 'c' keystroke has finished here, leave the method altogether
-            if(KeyStroke.getKeyStroke(KeyEvent.VK_8, ALT_DOWN_MASK, false).equals(stroke)){
-
-            }
-
             return piece.keyEvent(stroke);
         }
 
         // We know we're dealing with a maneuver keystroke
-// TO DO include decloaks, barrel rolls
         if (stroke.isOnKeyRelease() == false) {
 
 
@@ -335,14 +330,6 @@ return innerCommand;
             this.previousCollisionVisualization.add(lastMoveShapeUsed);
         }
     }
-
-
-    private void spawnPiece(GamePiece piece, Point position, VASSAL.build.module.Map map) {
-        Command placeCommand = map.placeOrMerge(piece, position);
-        placeCommand.execute();
-        GameModule.getGameModule().sendAndLog(placeCommand);
-    }
-
 
     private void checkIfOutOfBounds(String yourShipName) {
         Rectangle mapArea = new Rectangle(0,0,0,0);
