@@ -1,5 +1,6 @@
-# HWpopup 
-(X-Wing Vassal module with its proof-of-concept git name: Hello World Popup)
+# X-Wing Miniatures Vassal Module  
+
+
 
 ## Distance and geometry specs:
 
@@ -16,7 +17,7 @@
 
 * Small ship forward arc: 80.90 degrees
 * Large ship forward arc: 84.05 degrees
-* Large ship stardboard/port mobile turret arc: 95.95 degrees
+* Large ship starboard/port mobile turret arc: 95.95 degrees
 
 (to help locate the coordinates of the forward arc's intersection to the forward edge)
 * Small ship corner to intersection of forward arc to front edge: 8.3296 px
