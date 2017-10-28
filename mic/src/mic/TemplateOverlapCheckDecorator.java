@@ -22,6 +22,7 @@ import java.util.*;
 
 import static mic.Util.logToChat;
 import static mic.Util.logToChatWithTime;
+import static mic.Util.shapesOverlap;
 
 import VASSAL.counters.Decorator;
 import VASSAL.counters.EditablePiece;
@@ -43,7 +44,7 @@ public class TemplateOverlapCheckDecorator extends Decorator implements Editable
     private final FreeRotator testRotator;
 
     private FreeRotator myRotator = null;
-    public CollisionVisualization previousCollisionVisualization = null;
+    public MapVisualizations previousCollisionVisualization = null;
 
 
     public TemplateOverlapCheckDecorator() {
@@ -53,7 +54,6 @@ public class TemplateOverlapCheckDecorator extends Decorator implements Editable
     public TemplateOverlapCheckDecorator(GamePiece piece) {
         setInner(piece);
         this.testRotator = getRotator();
-        previousCollisionVisualization = new CollisionVisualization();
     }
 
     @Override
@@ -86,10 +86,7 @@ public class TemplateOverlapCheckDecorator extends Decorator implements Editable
     @Override
     public Command keyEvent(KeyStroke stroke) {
         //Any keystroke made on a ship will remove the orange shades
-
-        if(this.previousCollisionVisualization == null) {
-            this.previousCollisionVisualization = new CollisionVisualization();
-        }
+        previousCollisionVisualization = new MapVisualizations();
 
         //check to see if 'c' was pressed
         if(KeyStroke.getKeyStroke(KeyEvent.VK_C, 0, false).equals(stroke)) {
@@ -104,32 +101,13 @@ public class TemplateOverlapCheckDecorator extends Decorator implements Editable
                 announceBumpAndPaint(otherBumpableShapes);
 
                 //Add all the detected overlapping shapes to the map drawn components here
-                if(this.previousCollisionVisualization != null &&  this.previousCollisionVisualization.getCount() > 0){
-
-                    final java.util.Timer timer = new java.util.Timer();
-                    timer.schedule(new TimerTask() {
-                        int count = 0;
-                        @Override
-                        public void run() {
-                            try{
-                                previousCollisionVisualization.draw(getMap().getView().getGraphics(),getMap());
-                                count++;
-                                if(count == NBFLASHES * 2) {
-                                    getMap().removeDrawComponent(previousCollisionVisualization);
-                                    previousCollisionVisualization.shapes.clear();
-                                    timer.cancel();
-                                }
-                            } catch (Exception e) {
-
-                            }
-                        }
-                    }, 0,DELAYBETWEENFLASHES);
+                if(this.previousCollisionVisualization != null &&  this.previousCollisionVisualization.getShapes().size() > 0){
+                    innerCommand.append(previousCollisionVisualization);
+                    previousCollisionVisualization.execute();
                 }
-
-
-
                 return innerCommand;
             }
+            else  logToChatWithTime("This template does not overlap with an obstacle.");
         }
 
         return piece.keyEvent(stroke);
@@ -205,19 +183,6 @@ public class TemplateOverlapCheckDecorator extends Decorator implements Editable
             }
         }
         return shapes;
-    }
-
-    /**
-     * Returns true if the two provided shapes areas have any intersection
-     *
-     * @param shape1
-     * @param shape2
-     * @return
-     */
-    private boolean shapesOverlap(Shape shape1, Shape shape2) {
-        Area a1 = new Area(shape1);
-        a1.intersect(new Area(shape2));
-        return !a1.isEmpty();
     }
 
     public void draw(Graphics graphics, int i, int i1, Component component, double v) {
@@ -354,6 +319,7 @@ public class TemplateOverlapCheckDecorator extends Decorator implements Editable
         return transformed;
     }
 
+    /*
     private static class CollisionVisualization implements Drawable {
 
         private final java.util.List<Shape> shapes;
@@ -405,7 +371,7 @@ public class TemplateOverlapCheckDecorator extends Decorator implements Editable
             return true;
         }
     }
-
+*/
     private static class ShipPositionState {
         double x;
         double y;

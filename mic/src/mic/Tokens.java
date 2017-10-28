@@ -71,7 +71,7 @@ public enum Tokens {
     initiative,
     ordnance(
             none,
-            Lists.newArrayList("extramunitions"),
+            Lists.newArrayList("extramunitions", "ordnancesilos"),
             none
     ),
     tractorbeam(
@@ -81,7 +81,14 @@ public enum Tokens {
     ),
     hull,
     hugeshipforestats,
-    hugeshipaftstats;
+    hugeshipaftstats,
+    oldstylereinforce,
+    jam(
+            none,
+            Lists.newArrayList("jammingbeam"),
+            none
+
+    );
 
     private List<String> actions = Lists.newArrayList();
     private List<String> upgrades = Lists.newArrayList();

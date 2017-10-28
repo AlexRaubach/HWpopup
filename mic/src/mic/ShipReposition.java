@@ -1,43 +1,29 @@
 package mic;
 
-import java.awt.*;
-import java.awt.event.InputEvent;
-import java.awt.event.KeyEvent;
 import VASSAL.build.GameModule;
 import VASSAL.build.module.documentation.HelpFile;
-import VASSAL.build.module.map.Drawable;
-import VASSAL.build.widget.PieceSlot;
-import VASSAL.command.Command;
-import VASSAL.configure.HotKeyConfigurer;
-import VASSAL.counters.*;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
-
-import javax.swing.*;
-import java.awt.*;
-import java.awt.geom.AffineTransform;
-import java.awt.geom.Area;
-import java.util.*;
-import java.util.List;
-import java.util.Timer;
-
-
-import javax.swing.*;
-import VASSAL.build.GameModule;
+import VASSAL.build.module.map.boardPicker.Board;
 import VASSAL.build.widget.PieceSlot;
 import VASSAL.command.ChangeTracker;
+import VASSAL.command.Command;
 import VASSAL.command.MoveTracker;
+import VASSAL.configure.HotKeyConfigurer;
 import VASSAL.counters.*;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import VASSAL.build.module.documentation.HelpFile;
-import VASSAL.build.module.map.Drawable;
-import VASSAL.command.Command;
-import VASSAL.configure.HotKeyConfigurer;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.KeyEvent;
+import java.awt.geom.AffineTransform;
+import java.util.List;
+import java.util.Map;
+
 import static mic.Util.*;
-import static mic.Util.logToChat;
-import static mic.Util.newPiece;
+
+//import VASSAL.command.ChangeTracker;
 
 /**
  * Created by Mic on 07/08/2017.
@@ -138,9 +124,11 @@ enum RepoManeuver {
 }
 
 public class ShipReposition extends Decorator implements EditablePiece {
+    private static final Logger logger = LoggerFactory.getLogger(ShipReposition.class);
+
     public static final String ID = "ShipReposition";
     private FreeRotator myRotator = null;
-    public CollisionVisualization previousCollisionVisualization = null;
+    public MapVisualizations previousCollisionVisualization = null;
 
     private final FreeRotator testRotator;
     private Shape shapeForOverlap;
@@ -160,7 +148,6 @@ public class ShipReposition extends Decorator implements EditablePiece {
             .put("ALT SHIFT J", RepoManeuver.BR_Bk1_Left_Bwd_Mid)
             .put("ALT K", RepoManeuver.BR_Bk1_Right_Fwd_Mid)
             .put("ALT SHIFT K", RepoManeuver.BR_Bk1_Right_Bwd_Mid)
-
             .build();
 
     private static Map<String, RepoManeuver> keyStrokeToRepositionShip = ImmutableMap.<String, RepoManeuver>builder()
@@ -182,7 +169,6 @@ public class ShipReposition extends Decorator implements EditablePiece {
     public ShipReposition(GamePiece piece) {
         setInner(piece);
         this.testRotator = new FreeRotator("rotate;360;;;;;;;", null);
-        previousCollisionVisualization = new CollisionVisualization();
     }
 
     private Command spawnRepoTemplate(RepoManeuver theManeu) {
@@ -190,23 +176,16 @@ public class ShipReposition extends Decorator implements EditablePiece {
         if(isLargeShip(this))
         {
             switch(theManeu){
-                case BR1_Left_AFAP:
-                    theManeu = RepoManeuver.BR1_Left_AFAP_Large;
+                case BR1_Left_Mid:
+                    theManeu = RepoManeuver.BR1_Left_Mid_Large;
                     break;
-                case BR1_Left_ABAP:
-                    theManeu = RepoManeuver.BR1_Left_ABAP_Large;
-                    break;
-                case BR1_Right_AFAP:
-                    theManeu = RepoManeuver.BR1_Right_AFAP_Large;
-                    break;
-                case BR1_Right_ABAP:
-                    theManeu = RepoManeuver.BR1_Right_ABAP_Large;
+                case BR1_Right_Mid:
+                    theManeu = RepoManeuver.BR1_Right_Mid_Large;
                     break;
                 default:
                     return null;
             }
         }
-
 
         //STEP 1: Collision reposition template, centered as in in the image file, centered on 0,0 (upper left corner)
         GamePiece piece = newPiece(findPieceSlotByID(theManeu.getTemplateGpID()));
@@ -245,7 +224,6 @@ public class ShipReposition extends Decorator implements EditablePiece {
 
         return placeCommand;
     }
-
 
     private Command repositionTheShip(RepoManeuver repoTemplate) {
         //Getting into this function, repoShip is associated with the template used to reposition the ship. We also need the non-mapped final ship tentative position
@@ -324,7 +302,10 @@ public class ShipReposition extends Decorator implements EditablePiece {
             }
         }
         //STEP 6: Gather info for ship's final wanted position
-        Shape shapeForOverlap2 = this.piece.getShape();
+
+        // spawn a copy of the ship without the actions
+        Shape shapeForOverlap2 = getCopyOfShapeWithoutActionsForOverlapCheck(this.piece,repoTemplate );
+
         //Info Gathering: gets the angle from RepoManeuver which deals with degrees, local space with ship at 0,0, pointing up
         double tAngle2;
         tAngle2 = repoTemplate.getShipAngle(); //repo maneuver's angle
@@ -348,28 +329,36 @@ public class ShipReposition extends Decorator implements EditablePiece {
 
         //STEP 9: Check for overlap with obstacles and ships with the final ship position
         List<BumpableWithShape> shipsOrObstacles = getBumpablesOnMap(true);
+
+        String yourShipName = getShipStringForReports(true, this.getProperty("Pilot Name").toString(), this.getProperty("Craft ID #").toString());
         if(shapeForOverlap2 != null){
+
             List<BumpableWithShape> overlappingShipOrObstacles = findCollidingEntities(shapeForOverlap2, shipsOrObstacles);
+
             if(overlappingShipOrObstacles.size() > 0) {
                 for(BumpableWithShape bws : overlappingShipOrObstacles)
                 {
                     previousCollisionVisualization.add(bws.shape);
-                    String overlapOnFinalWarn = "*** Warning: Ship's final reposition location currently overlaps a Ship or Obstacle. You can attempt to move it into a legal position and check if it still overlaps with 'shift-c'.";
+
+                    String overlapOnFinalWarn = "*** Warning: " + yourShipName + "'s final reposition location currently overlaps a Ship or Obstacle. You can attempt to move it into a legal position and check if it still overlaps with 'alt-c'.";
                     if(bigCommand !=null) bigCommand.append(logToChatCommand(overlapOnFinalWarn));
                     else bigCommand = logToChatCommand(overlapOnFinalWarn);
-
                 }
                 previousCollisionVisualization.add(shapeForOverlap2);
                 spawnTemplate = true; //we'll want the template
             }
         }
+
+        // STEP 9.5: Check for movement out of bounds
+        checkIfOutOfBounds(yourShipName, shapeForOverlap2);
+
         //STEP 10: optional if there's any kind of overlap, produce both the template and initial ship position
         if(spawnTemplate == true) {
             //the template is needed, in case of any kind of overlap
             if(bigCommand !=null) bigCommand.append(getMap().placeOrMerge(piece, new Point((int)off1x_rot + (int)off2x, (int)off1y_rot + (int)off2y)));
             else bigCommand = getMap().placeOrMerge(piece, new Point((int)off1x_rot + (int)off2x, (int)off1y_rot + (int)off2y));
             //clone the initial position
-            GamePiece myClone = PieceCloner.getInstance().clonePiece(this);
+            GamePiece myClone = PieceCloner.getInstance().clonePiece(Decorator.getOutermost(this));
             bigCommand.append(getMap().placeOrMerge(myClone, new Point((int)off2x, (int)off2y)));
         }
         //STEP 11: reposition the ship
@@ -380,19 +369,75 @@ public class ShipReposition extends Decorator implements EditablePiece {
     return bigCommand;
     }
 
+    private void checkIfOutOfBounds(String yourShipName, Shape shapeForOutOfBounds) {
+        Rectangle mapArea = new Rectangle(0,0,0,0);
+        try{
+            Board b = getMap().getBoards().iterator().next();
+            mapArea = b.bounds();
+            String name = b.getName();
+        }catch(Exception e)
+        {
+            logToChat("Board name isn't formatted right, change to #'x#' Description");
+        }
+        //Shape theShape = BumpableWithShape.getBumpableCompareShape(this);
 
+        if(shapeForOutOfBounds.getBounds().getMaxX() > mapArea.getBounds().getMaxX()  || // too far to the right
+                shapeForOutOfBounds.getBounds().getMaxY() > mapArea.getBounds().getMaxY() || // too far to the bottom
+                shapeForOutOfBounds.getBounds().getX() < mapArea.getBounds().getX() || //too far to the left
+                shapeForOutOfBounds.getBounds().getY() < mapArea.getBounds().getY()) // too far to the top
+        {
 
+            logToChatWithTime("* -- " + yourShipName + " flew out of bounds");
+            this.previousCollisionVisualization.add(shapeForOutOfBounds);
+        }
+    }
+
+    private Shape getCopyOfShapeWithoutActionsForOverlapCheck(GamePiece oldPiece,RepoManeuver repoTemplate ) {
+        // Copy the old piece, but don't set the State
+        GamePiece newPiece = GameModule.getGameModule().createPiece(oldPiece.getType());
+        VASSAL.build.module.Map var3 = oldPiece.getMap();
+        this.piece.setMap((VASSAL.build.module.Map) null);
+        // manually set the same position of the old piece
+        newPiece.setPosition(oldPiece.getPosition());
+        oldPiece.setMap(var3);
+
+        // now set the angle
+        double templateAngle;
+        templateAngle = repoTemplate.getTemplateAngle(); //repo maneuver's angle
+        double shipAngle = this.getRotator().getAngle(); //ship angle
+        FreeRotator rotater = (FreeRotator) Decorator.getDecorator(newPiece, FreeRotator.class);
+        rotater.setAngle(shipAngle);
+        return newPiece.getShape();
+    }
 
     @Override
     public Command keyEvent(KeyStroke stroke) {
         //Any keystroke made on a ship will remove the orange shades
+        previousCollisionVisualization = new MapVisualizations();
 
         ChangeTracker changeTracker = new ChangeTracker(this);
         Command result = changeTracker.getChangeCommand();
         MoveTracker moveTracker = new MoveTracker(Decorator.getOutermost(this));
         result.append(moveTracker.getMoveCommand());
 
-
+        if (KeyStroke.getKeyStroke(KeyEvent.VK_C, KeyEvent.ALT_DOWN_MASK,false).equals(stroke)){
+            List<BumpableWithShape> BWS = getBumpablesOnMap(true);
+            Shape shipShape = getBumpableCompareShape(this);
+            List<BumpableWithShape> overlappingObstacles = findCollidingEntities(shipShape, BWS);
+                if(overlappingObstacles.size() > 0) {
+                    for(BumpableWithShape bws : overlappingObstacles)
+                    {
+                        previousCollisionVisualization.add(bws.shape);
+                        String yourShipName = getShipStringForReports(true, this.getProperty("Pilot Name").toString(), this.getProperty("Craft ID #").toString());
+                        logToChat("*** Warning: " + yourShipName + " overlaps a " + bws.type + ".");
+                    }
+                    previousCollisionVisualization.add(shipShape);
+                }
+                else {
+                    String yourShipName = getShipStringForReports(true, this.getProperty("Pilot Name").toString(), this.getProperty("Craft ID #").toString());
+                    logToChatWithTime(yourShipName + " does not overlap with an obstacle, ship or mine.");
+                }
+        }
 
         RepoManeuver repoTemplateDrop = getKeystrokeTemplateDrop(stroke);
         // Template drop requested
@@ -415,16 +460,19 @@ public class ShipReposition extends Decorator implements EditablePiece {
                 }
             }
             result.append(piece.keyEvent(stroke));
-            return result;
         }
 
         RepoManeuver repoShip = getKeystrokeRepoManeuver(stroke);
         //Ship reposition requested
         if(repoShip != null  && stroke.isOnKeyRelease() == false) {
+            /*
             if (this.previousCollisionVisualization != null && this.previousCollisionVisualization.getCount() > 0) {
                 getMap().removeDrawComponent(this.previousCollisionVisualization);
                 this.previousCollisionVisualization.shapes.clear();
-            }
+            }*/
+
+
+
 
             //detect that the ship's final position overlaps a ship or obstacle
             Command repoCommand = repositionTheShip(repoShip);
@@ -432,43 +480,23 @@ public class ShipReposition extends Decorator implements EditablePiece {
             else{
                 result.append(repoCommand);
                 result.append(piece.keyEvent(stroke));
+                if(this.previousCollisionVisualization != null &&  this.previousCollisionVisualization.getShapes().size() > 0){
+                    result.append(previousCollisionVisualization);
+                    previousCollisionVisualization.execute();
+
+                }
                 return result;
             }
             //detect that the template used overlaps an obstacle
 
         }
-        // if a collision has been found, start painting the shapes and flash them with a timer, mark the bomb spawner for deletion after this has gone through.
-        if(this.previousCollisionVisualization != null &&  this.previousCollisionVisualization.getCount() > 0){
-
-            final Timer timer = new Timer();
-            timer.schedule(new TimerTask() {
-                int count = 0;
-                @Override
-                public void run() {
-                    try{
-                        previousCollisionVisualization.draw(getMap().getView().getGraphics(),getMap());
-                        count++;
-                        if(count == NBFLASHES * 2) {
-                            FlushOldVisu();
-                            timer.cancel();
-                        }
-                    } catch (Exception e) {
-                        logToChat("bug");
-
-                    }
-                }
-            }, 0,DELAYBETWEENFLASHES);
+        if(this.previousCollisionVisualization != null &&  this.previousCollisionVisualization.getShapes().size() > 0){
+            result.append(previousCollisionVisualization);
+            previousCollisionVisualization.execute();
+            return result;
         }
         return piece.keyEvent(stroke);
     }
-
-    private void FlushOldVisu() {
-        if (this.previousCollisionVisualization != null && this.previousCollisionVisualization.getCount() > 0) {
-            getMap().removeDrawComponent(this.previousCollisionVisualization);
-            this.previousCollisionVisualization.shapes.clear();
-        }
-    }
-
 
     private List<BumpableWithShape> findCollidingEntities(Shape myTestShape, List<BumpableWithShape> otherShapes) {
         List<BumpableWithShape> shapes = Lists.newLinkedList();
@@ -479,18 +507,7 @@ public class ShipReposition extends Decorator implements EditablePiece {
         }
         return shapes;
     }
-    /**
-     * Returns true if the two provided shapes areas have any intersection
-     *
-     * @param shape1
-     * @param shape2
-     * @return
-     */
-    private boolean shapesOverlap(Shape shape1, Shape shape2) {
-        Area a1 = new Area(shape1);
-        a1.intersect(new Area(shape2));
-        return !a1.isEmpty();
-    }
+
     private List<BumpableWithShape> getBumpablesOnMap(Boolean wantShipsToo) {
 
         List<BumpableWithShape> bumpables = Lists.newArrayList();
@@ -512,15 +529,29 @@ public class ShipReposition extends Decorator implements EditablePiece {
                 bumpables.add(new BumpableWithShape((Decorator)piece,"Debris","2".equals(testFlipString)));
             } else if (piece.getState().contains("this_is_a_bomb")) {
                 bumpables.add(new BumpableWithShape((Decorator)piece, "Mine", false));
-            } else if(wantShipsToo == true && piece.getState().contains("this_is_a_ship")) {
-                bumpables.add(new BumpableWithShape((Decorator)piece, "Ship",false));
+            } else if(wantShipsToo == true && piece.getState().contains("this_is_a_ship")){
+                //MrMurphM
+            //    GamePiece newPiece = PieceCloner.getInstance().clonePiece(piece);
+            //    newPiece.setPosition(piece.getPosition());
+                //END
+                BumpableWithShape tentativeBumpable = new BumpableWithShape((Decorator)piece, "Ship",false);
+                if (getId().equals(tentativeBumpable.bumpable.getId())) {
+                    continue;
+                }
+                bumpables.add(tentativeBumpable);
 
             }
         }
         return bumpables;
     }
+
+    public String getId() {
+        return this.piece.getId();
+    }
+
     private boolean isLargeShip(Decorator ship) {
-        return BumpableWithShape.getRawShape(ship).getBounds().getWidth() > 114;
+        BumpableWithShape test = new BumpableWithShape(ship, "Ship", "notimportant", "notimportant");
+        return test.chassis.getChassisName().equals("large");
     }
 
     private PieceSlot findPieceSlotByID(String gpID) {
@@ -528,12 +559,6 @@ public class ShipReposition extends Decorator implements EditablePiece {
             if(gpID.equals(ps.getGpId())) return ps;
         }
         return null;
-    }
-    double rotX(double x, double y, double angle){
-        return Math.cos(-Math.PI*angle/180.0f)*x - Math.sin(-Math.PI*angle/180.0f)*y;
-    }
-    double rotY(double x, double y, double angle){
-        return Math.sin(-Math.PI*angle/180.0f)*x + Math.cos(-Math.PI*angle/180.0f)*y;
     }
     private double convertAngleToGameLimits(double angle) {
         this.testRotator.setAngle(angle);
@@ -622,7 +647,7 @@ public class ShipReposition extends Decorator implements EditablePiece {
         return this.piece.getName();
     }
 
-
+/*
     private static class CollisionVisualization implements Drawable {
 
         private final List<Shape> shapes;
@@ -675,4 +700,5 @@ public class ShipReposition extends Decorator implements EditablePiece {
             return true;
         }
     }
+    */
 }

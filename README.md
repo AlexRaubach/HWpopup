@@ -1,5 +1,5 @@
-# HWpopup 
-(X-Wing Vassal module with its proof-of-concept git name: Hello World Popup)
+# XWVassal 
+(X-Wing Vassal module and Web page for the X-Wing Vassal league in /docs/)
 
 ## Distance and geometry specs:
 
@@ -22,6 +22,8 @@
 * Small ship corner to intersection of forward arc to front edge: 8.3296 px
 * Large ship corner to intersection of forward arc to front edge: 11.1650 px
 
+Approximative bullseye arc corner to bullseye line
+* small ship: 34.24 px
 
 ## Updating the module
 
@@ -33,7 +35,7 @@
 
 ### Adding new ships with dials
 1. Vassal editor, create a ship-specific Protytpe for its actions, await Radarman5's ship art and combine it in a deep-layered photoshop file  (save as png), create a new ship-specific tab in the Pieces window, create its dial
-2. create ordered, open dial+strip for the new ship here: http://s93768914.onlinehome.us/xwing/dialgen/dialgen.html
+2. create ordered, open dial+strip for the new ship here: http://xwvassal.info/dialgen/dialgen
 3. gradlew unpackVmod
 4. gradlew downloadXwingData
 5. push

@@ -7,11 +7,13 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Area;
 import java.util.*;
 import java.util.List;
+import java.util.Map;
 import java.util.Timer;
 
 import javax.swing.*;
 
 import VASSAL.build.GameModule;
+import VASSAL.build.module.*;
 import VASSAL.build.widget.PieceSlot;
 import VASSAL.command.ChangeTracker;
 import VASSAL.command.MoveTracker;
@@ -118,7 +120,7 @@ public class BombSpawner extends Decorator implements EditablePiece {
 
     private List<Shape> shapesForOverlap;
     private FreeRotator myRotator = null;
-    public CollisionVisualization previousCollisionVisualization = null;
+    public MapVisualizations previousCollisionVisualization = null;
     private Boolean processingOnlyOneBomb = false;
 
     private static Map<String, BombManeuver> keyStrokeToManeuver = ImmutableMap.<String, BombManeuver>builder()
@@ -149,7 +151,6 @@ public class BombSpawner extends Decorator implements EditablePiece {
     public BombSpawner(GamePiece piece) {
         setInner(piece);
         this.testRotator = new FreeRotator("rotate;360;;;;;;;", null);
-        previousCollisionVisualization = new CollisionVisualization();
         shapesForOverlap = new ArrayList<Shape>();
     }
 
@@ -239,12 +240,6 @@ public class BombSpawner extends Decorator implements EditablePiece {
         shapesForOverlap.add(transfShape);
         return placeCommand;
     }
-    double rotX(double x, double y, double angle){
-        return Math.cos(-Math.PI*angle/180.0f)*x - Math.sin(-Math.PI*angle/180.0f)*y;
-    }
-    double rotY(double x, double y, double angle){
-        return Math.sin(-Math.PI*angle/180.0f)*x + Math.cos(-Math.PI*angle/180.0f)*y;
-    }
 
     private double convertAngleToGameLimits(double angle) {
         this.testRotator.setAngle(angle);
@@ -277,8 +272,10 @@ public class BombSpawner extends Decorator implements EditablePiece {
     @Override
     public Command keyEvent(KeyStroke stroke) {
         //Any keystroke made on a ship will remove the orange shades
+        previousCollisionVisualization = new MapVisualizations();
+
         ChangeTracker changeTracker = new ChangeTracker(this);
-        Command result = changeTracker.getChangeCommand();
+        final Command result = changeTracker.getChangeCommand();
         MoveTracker moveTracker = new MoveTracker(Decorator.getOutermost(this));
         result.append(moveTracker.getMoveCommand());
 
@@ -322,33 +319,20 @@ public class BombSpawner extends Decorator implements EditablePiece {
                     }
 
                     // if a collision has been found, start painting the shapes and flash them with a timer, mark the bomb spawner for deletion after this has gone through.
-                    if(isCollisionOccuring == true && this.previousCollisionVisualization != null &&  this.previousCollisionVisualization.getCount() > 0){
+                    if(isCollisionOccuring == true && this.previousCollisionVisualization != null &&  this.previousCollisionVisualization.getShapes().size() > 0){
+                        result.append(previousCollisionVisualization);
+                        previousCollisionVisualization.execute();
 
-                        final Timer timer = new Timer();
-                        timer.schedule(new TimerTask() {
-                            int count = 0;
-                            @Override
-                            public void run() {
-                                try{
-                                    previousCollisionVisualization.draw(getMap().getView().getGraphics(),getMap());
-                                    count++;
-                                    if(count == NBFLASHES * 2) {
-                                        getMap().removeDrawComponent(previousCollisionVisualization);
-                                        timer.cancel();
-                                        KeyStroke deleteyourself = KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK, false);
-                                        Command goToHell = piece.keyEvent(deleteyourself);
-                                        goToHell.execute();
-                                    }
-                                } catch (Exception e) {
-                                }
-                            }
-                        }, 0,DELAYBETWEENFLASHES);
+                        KeyStroke deleteyourself = KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK, false);
+                        Command goToHell = keyEvent(deleteyourself);
+                        result.append(goToHell);
+
                         return result;
                     }
                     else { //mine was dropped, no collision found
                         KeyStroke deleteyourself = KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK, false);
                         Command goToHell = keyEvent(deleteyourself);
-                        goToHell.execute();
+                        result.append(goToHell);
                         return result;
                     }
 
@@ -362,7 +346,7 @@ public class BombSpawner extends Decorator implements EditablePiece {
                     result.append(placeBombCommand);
                     KeyStroke deleteyourself = KeyStroke.getKeyStroke(KeyEvent.VK_D, InputEvent.CTRL_DOWN_MASK, false);
                     Command goToHell = keyEvent(deleteyourself);
-                    goToHell.execute();
+                    result.append(goToHell);
 
                     return result;
                 } // end of dealing with a non-mine drop
@@ -405,18 +389,6 @@ public class BombSpawner extends Decorator implements EditablePiece {
         return shapes;
     }
 
-    /**
-     * Returns true if the two provided shapes areas have any intersection
-     *
-     * @param shape1
-     * @param shape2
-     * @return
-     */
-    private boolean shapesOverlap(Shape shape1, Shape shape2) {
-        Area a1 = new Area(shape1);
-        a1.intersect(new Area(shape2));
-        return !a1.isEmpty();
-    }
 
     public void draw(Graphics graphics, int i, int i1, Component component, double v) {
         this.piece.draw(graphics, i, i1, component, v);
@@ -539,6 +511,67 @@ public class BombSpawner extends Decorator implements EditablePiece {
         return bumpables;
     }
 
+   /* private static class FlashCommand extends Command implements Drawable {
+
+
+
+        private final List<Shape> shapes;
+        private boolean tictoc = false;
+        Color bumpColor = new Color(215, 255, 0, 150);
+
+        FlashCommand() {
+            this.shapes = new ArrayList<Shape>();
+        }
+        FlashCommand(Shape shipShape) {
+            this.shapes = new ArrayList<Shape>();
+            this.shapes.add(shipShape);
+        }
+
+        protected void executeCommand() {
+            draw(GameModule.getGameModule(), )
+        }
+
+        protected Command myUndoCommand() {
+            return null;
+        }
+
+        public void add(Shape bumpable) {
+            this.shapes.add(bumpable);
+        }
+
+        public int getCount() {
+            int count = 0;
+            Iterator<Shape> it = this.shapes.iterator();
+            while(it.hasNext()) {
+                count++;
+                it.next();
+            }
+            return count;
+        }
+
+        public void draw(Graphics graphics, VASSAL.build.module.Map map) {
+            Graphics2D graphics2D = (Graphics2D) graphics;
+            if(tictoc == false)
+            {
+                graphics2D.setColor(bumpColor);
+                AffineTransform scaler = AffineTransform.getScaleInstance(map.getZoom(), map.getZoom());
+                for (Shape shape : shapes) {
+                    graphics2D.fill(scaler.createTransformedShape(shape));
+                }
+                tictoc = true;
+            }
+            else {
+                map.getView().repaint();
+                tictoc = false;
+            }
+        }
+
+        public boolean drawAboveCounters() {
+            return true;
+        }
+    }*/
+
+   /*
     private static class CollisionVisualization implements Drawable {
 
         private final List<Shape> shapes;
@@ -591,7 +624,7 @@ public class BombSpawner extends Decorator implements EditablePiece {
             return true;
         }
     }
-
+*/
     private static class ShipPositionState {
         double x;
         double y;
